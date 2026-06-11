@@ -14,10 +14,17 @@ endif
 
 # Variables
 GOBASE ?= $(shell pwd)
+UNAME_S := $(shell uname -s)
+
+# Hermetic per-repo caches. Skipped on Windows (Git Bash make), where
+# the unix-style $(shell pwd) is not an absolute path as far as the
+# Windows Go toolchain is concerned; Go's default cache is used there.
+ifeq (,$(findstring MINGW,$(UNAME_S))$(findstring MSYS,$(UNAME_S)))
 GOCACHE := ${GOBASE}/.cache/go-build
 GOLANGCI_LINT_CACHE := ${GOBASE}/.cache/golangci-lint
+endif
+
 WEBSITE_PORT ?= 8000
-UNAME_S := $(shell uname -s)
 
 APP_NAME ?= DeckCheck
 APP_ID   ?= dev.adbr.deckcheck
