@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="DeckCheck is a local-first desktop app for fast, question-based classification over folders of images and CSV rows."
+    >
+    <meta name="theme-color" content="#eab308">
+    <meta property="og:title" content="DeckCheck">
+    <meta
+      property="og:description"
+      content="Ask repeatable multiple-choice questions. Classify fast. Export clean data."
+    >
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://deckcheck.adbr.dev/">
+    <meta property="og:image" content="https://deckcheck.adbr.dev/assets/deckcheck-icon.png">
+    <title>DeckCheck - Question-based dataset classification</title>
+    <link rel="icon" href="assets/icon-180.png">
+    <link rel="apple-touch-icon" href="assets/icon-180.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="DeckCheck home">
+        <img src="assets/icon-180.png" alt="" width="36" height="36">
+        <span>DeckCheck</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="https://github.com/adambrett/deckcheck">GitHub</a>
+        <a class="nav-button" href="#download">Download</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Local-first dataset triage</p>
+          <h1 id="hero-title">Ask questions. Classify fast. Move on.</h1>
+          <p class="lede">
+            DeckCheck is a tiny source-available desktop app for turning folders of images and CSV rows
+            into clean classified datasets, one keyboard shortcut at a time.
+          </p>
+          <div class="actions" aria-label="Primary actions">
+            <a class="primary-action" href="#download">Download DeckCheck</a>
+            <a class="secondary-action" href="https://github.com/adambrett/deckcheck">View source</a>
+          </div>
+        </div>
+
+        <div class="product-shot">
+          <div
+            class="window"
+            id="deck"
+            role="group"
+            aria-label="Interactive preview. Press 1, 2 or 3 to answer; use the left and right arrow keys to change photo."
+          >
+            <div class="window-top">
+              <span></span>
+              <span></span>
+              <span></span>
+              <p class="window-title">birds-2026.deckcheck</p>
+            </div>
+            <div class="classifier-preview">
+              <div class="record-pane">
+                <img id="deck-photo" src="assets/bird-1.jpg" width="900" height="601"
+                  alt="Kingfisher perched on a branch, the current record being classified">
+                <p class="record-meta"><span id="deck-position">photo 1 of 3</span> · IMG_4471.jpg</p>
+              </div>
+              <div class="question-pane">
+                <p class="question-count">Question 1 of 1</p>
+                <h2>Sharp enough for the field guide?</h2>
+                <div id="deck-choices">
+                  <button type="button" class="choice" aria-pressed="false"><kbd>1</kbd><span>Keep it</span></button>
+                  <button type="button" class="choice" aria-pressed="false"><kbd>2</kbd><span>Reject it</span></button>
+                  <button type="button" class="choice" aria-pressed="false"><kbd>3</kbd><span>Decide later</span></button>
+                </div>
+                <p class="deck-status" id="deck-status" aria-live="polite">Try it: press <kbd>1</kbd></p>
+              </div>
+            </div>
+            <div class="status-strip">
+              <span>Folder or CSV</span>
+              <span><kbd>&larr;</kbd> <kbd>&rarr;</kbd> to move</span>
+              <span>Auto-resume</span>
+            </div>
+          </div>
+          <p class="shot-note">This preview is live: number keys answer, arrow keys change the photo.</p>
+        </div>
+      </section>
+
+      <section class="feature-band" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">Built for one job</p>
+          <h2 id="features-title">Rapid human judgement, captured cleanly.</h2>
+        </div>
+        <div class="features">
+          <article>
+            <h3>Images or rows</h3>
+            <p>Open a folder of images or a CSV of data and classify each item in sequence.</p>
+          </article>
+          <article>
+            <h3>Your questions</h3>
+            <p>Define the multiple-choice questions you actually need, one or many per item.</p>
+          </article>
+          <article>
+            <h3>Keyboard-first flow</h3>
+            <p>Answer with <kbd>1</kbd>&ndash;<kbd>9</kbd>, move with arrows, export with <kbd>&#8984;E</kbd>. Mistakes are one keypress back.</p>
+          </article>
+          <article>
+            <h3>Resumes where you left off</h3>
+            <p>Everything lives in one <code>.deckcheck</code> file. Stop mid-run, reopen later, carry on.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="positioning" aria-labelledby="positioning-title">
+        <div>
+          <p class="eyebrow">No platform ceremony</p>
+          <h2 id="positioning-title">Not an annotation suite. Not an AI pipeline.</h2>
+        </div>
+        <p>
+          DeckCheck is for the small, sharp classification jobs that should not require servers,
+          accounts, Docker, bounding boxes, collaboration layers, or enterprise workflow.
+          Open data, answer structured questions, export the result as CSV.
+        </p>
+      </section>
+
+      <section class="download" id="download" aria-labelledby="download-title">
+        <div class="section-heading">
+          <p class="eyebrow">Free, source available</p>
+          <h2 id="download-title">Download DeckCheck</h2>
+        </div>
+        <ul class="platforms">
+          <li>
+            <a href="https://github.com/adambrett/deckcheck/releases/latest/download/deckcheck-darwin-arm64.zip">
+              <strong>macOS</strong>
+              <span>Apple Silicon</span>
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/adambrett/deckcheck/releases/latest/download/deckcheck-linux-amd64.tar.xz">
+              <strong>Linux</strong>
+              <span>x86_64</span>
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/adambrett/deckcheck/releases/latest/download/deckcheck-windows-amd64.zip">
+              <strong>Windows</strong>
+              <span>x86_64</span>
+            </a>
+          </li>
+        </ul>
+        <p class="download-note">
+          Releases ship with SHA-256 checksums. Or build it yourself:
+          <a href="https://github.com/adambrett/deckcheck#installation">instructions on GitHub</a>.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <span>
+        BSD-3-Clause + Commons Clause. Source on
+        <a href="https://github.com/adambrett/deckcheck">GitHub</a>.
+        <a href="https://adbr.me">Author</a>.
+      </span>
+    </footer>
+
+    <!-- Bird photos via Unsplash (unsplash.com/license):
+         kingfisher by Boris Smokrovic, parakeet by Zdeněk Macháček,
+         warbling white-eye by Hoyoun Lee. -->
+    <script>
+      (function () {
+        var records = [
+          { src: "assets/bird-1.jpg", file: "IMG_4471.jpg", alt: "Kingfisher perched on a branch, the current record being classified" },
+          { src: "assets/bird-2.jpg", file: "IMG_4472.jpg", alt: "Green parakeet on a mossy branch, the current record being classified" },
+          { src: "assets/bird-3.jpg", file: "IMG_4473.jpg", alt: "Warbling white-eye among pink blossom, the current record being classified" },
+        ];
+        var answers = [null, null, null];
+        var current = 0;
+
+        var photo = document.getElementById("deck-photo");
+        var position = document.getElementById("deck-position");
+        var meta = photo.parentElement.querySelector(".record-meta");
+        var status = document.getElementById("deck-status");
+        var choices = Array.prototype.slice.call(
+          document.querySelectorAll("#deck-choices .choice")
+        );
+
+        function render() {
+          var record = records[current];
+          photo.src = record.src;
+          photo.alt = record.alt;
+          meta.innerHTML =
+            '<span id="deck-position">photo ' + (current + 1) + " of " + records.length + "</span> · " + record.file;
+          choices.forEach(function (choice, i) {
+            var selected = answers[current] === i;
+            choice.classList.toggle("selected", selected);
+            choice.setAttribute("aria-pressed", selected ? "true" : "false");
+          });
+          var done = answers.filter(function (a) { return a !== null; }).length;
+          if (done === 0) {
+            status.innerHTML = "Try it: press <kbd>1</kbd>";
+          } else if (done === records.length) {
+            status.textContent = "3 / 3 classified ✓ In the app, ⌘E exports the CSV.";
+          } else {
+            status.textContent = done + " / " + records.length + " classified";
+          }
+        }
+
+        function answer(i) {
+          answers[current] = answers[current] === i ? null : i;
+          render();
+          if (answers[current] !== null && current < records.length - 1) {
+            window.setTimeout(function () {
+              current += 1;
+              render();
+            }, 300);
+          }
+        }
+
+        choices.forEach(function (choice, i) {
+          choice.addEventListener("click", function () { answer(i); });
+        });
+
+        document.addEventListener("keydown", function (event) {
+          if (event.metaKey || event.ctrlKey || event.altKey) return;
+          var tag = document.activeElement && document.activeElement.tagName;
+          if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+          if (event.key >= "1" && event.key <= "3") {
+            answer(Number(event.key) - 1);
+            event.preventDefault();
+          } else if (event.key === "ArrowRight") {
+            current = (current + 1) % records.length;
+            render();
+            event.preventDefault();
+          } else if (event.key === "ArrowLeft") {
+            current = (current + records.length - 1) % records.length;
+            render();
+            event.preventDefault();
+          }
+        });
+
+        records.forEach(function (record) {
+          var img = new Image();
+          img.src = record.src;
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

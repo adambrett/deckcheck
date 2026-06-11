@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Install Linux native deps
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
+
+      - name: Format check
+        if: matrix.os == 'ubuntu-latest'
+        run: make fmt-check
+
+      - name: Lint
+        if: matrix.os == 'ubuntu-latest'
+        run: make lint
+
+      - name: Test
+        run: make test
+
+      - name: Coverage
+        if: matrix.os == 'ubuntu-latest'
+        run: make coverage

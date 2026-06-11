@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for the notarised release build
+  (.github/workflows/release.yml, RELEASE_NOTARIZE=true path).
+
+  cs.allow-unsigned-executable-memory: required by the Go runtime +
+  cgo (DuckDB, GLFW) under the hardened runtime; without it the
+  notarised binary can crash at startup when the runtime maps
+  executable pages.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+</dict>
+</plist>

@@ -1,0 +1,31 @@
+dir: internal/mocks
+filename: "{{ .PackageName | lower }}_{{ .InterfaceName | lower }}.go"
+mockname: "{{ camelcase .PackageName }}{{ .InterfaceName }}"
+outpkg: mocks
+packages:
+  github.com/adambrett/go-fyne/pkg/browse:
+    interfaces:
+      Picker: {}
+  github.com/adambrett/deckcheck/internal/export:
+    interfaces:
+      Project: {}
+  github.com/adambrett/deckcheck/internal/ui/views/classifier:
+    config:
+      dir: internal/ui/mocks
+    interfaces:
+      Project:
+        config:
+          mockname: ClassifierProject
+          filename: classifier_project.go
+      Exporter:
+        config:
+          mockname: ClassifierExporter
+          filename: classifier_exporter.go
+  github.com/adambrett/deckcheck/internal/ui/app:
+    config:
+      dir: internal/ui/mocks
+    interfaces:
+      Project:
+        config:
+          mockname: AppProject
+          filename: app_project.go

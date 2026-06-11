@@ -1,0 +1,20 @@
+# Build artifacts
+bin/
+
+# Packaged Fyne builds (produced by `make package` and the release workflow)
+/DeckCheck
+/DeckCheck.exe
+/DeckCheck.app/
+/DeckCheck.tar.xz
+/deckcheck-*.tar.xz
+/deckcheck-*.zip
+
+# Test / coverage output
+.cache/
+coverage.out
+coverage.html
+*.test
+node_modules/
+
+# DeckCheck project files (the format this app saves)
+*.deckcheck

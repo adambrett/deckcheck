@@ -1,0 +1,260 @@
+# Required secrets and variables for macOS notarisation (configure in GitHub repo
+# Settings → Secrets and variables → Actions before flipping RELEASE_NOTARIZE=true):
+#
+# Secrets:
+#   MACOS_CERT_P12_BASE64    - Developer ID Application cert + private key exported from
+#                              Keychain Access as .p12, then base64-encoded
+#                              (`base64 -i DeveloperIDApplication.p12 | pbcopy`)
+#   MACOS_CERT_P12_PASSWORD  - Password used when exporting the .p12 from Keychain Access
+#   MACOS_SIGN_IDENTITY      - Exact signing identity string, e.g.
+#                              "Developer ID Application: Adam Brett (XXXXXXXXXX)"
+#                              (from `security find-identity -p codesigning -v`)
+#   NOTARY_API_KEY_P8_BASE64 - App Store Connect API key (.p8), base64-encoded.
+#                              Download once from App Store Connect → Users and Access →
+#                              Integrations → Team Keys. (`base64 -i AuthKey_XXX.p8 | pbcopy`)
+#   NOTARY_API_KEY_ID        - 10-character alphanumeric Key ID from App Store Connect Team Keys
+#   NOTARY_API_ISSUER_ID     - UUID Issuer ID from App Store Connect (above the Team Keys table)
+#
+# Variable (non-sensitive; set in the Variables tab, not Secrets tab):
+#   RELEASE_NOTARIZE         - Set to the string "true" to enable the notarisation path.
+#                              Leave absent or set to "false" to use the ad-hoc fallback.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip tests (use for hotfixes)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# Serialise releases: two concurrent dispatches would compute the same
+# CalVer micro and race the tag push.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Compute the CalVer version first so every packaged binary carries
+  # it (the About dialog reads it from the Fyne metadata).
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate CalVer version
+        id: version
+        run: |
+          # Unpadded month: fyne's --app-version parser rejects
+          # leading-zero components ("2026.06.1" fails, "2026.6.1"
+          # passes), and the tag must match the embedded version.
+          YEAR_MONTH=$(date +%Y.%-m)
+
+          # Find the latest tag matching this month
+          LATEST=$(git tag -l "${YEAR_MONTH}.*" | sort -V | tail -1)
+
+          if [ -z "$LATEST" ]; then
+            MICRO=1
+          else
+            # Extract the micro version and increment
+            MICRO=$((${LATEST##*.} + 1))
+          fi
+
+          VERSION="${YEAR_MONTH}.${MICRO}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Calculated version: ${VERSION}"
+
+  # Run lint and tests first
+  ci:
+    if: ${{ !inputs.skip_tests }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
+
+      - name: Format check
+        run: make fmt-check
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
+
+  # Build for each platform
+  build:
+    needs: [ci, version]
+    if: ${{ always() && needs.version.result == 'success' && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
+    env:
+      APP_VERSION: ${{ needs.version.outputs.version }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact: deckcheck-linux-amd64.tar.xz
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            artifact: deckcheck-darwin-arm64.zip
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            artifact: deckcheck-windows-amd64.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
+
+      # The fyne CLI comes from go.mod's tool directive, so the
+      # packaging tool is pinned and upgraded like every other
+      # dependency instead of floating on @latest.
+      - name: Package Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          go tool fyne package -os linux -name DeckCheck -app-id dev.adbr.deckcheck -app-version "$APP_VERSION" -icon $PWD/internal/assets/icon.png -release -src ./cmd/gui/deckcheck
+          mv DeckCheck.tar.xz deckcheck-linux-amd64.tar.xz
+
+      - name: Package macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          go tool fyne package -os darwin -name DeckCheck -app-id dev.adbr.deckcheck -app-version "$APP_VERSION" -icon $PWD/internal/assets/icon.png -release -src ./cmd/gui/deckcheck
+
+      - name: Import Developer ID certificate (notarize path)
+        if: matrix.os == 'macos-latest' && vars.RELEASE_NOTARIZE == 'true'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          p12-password: ${{ secrets.MACOS_CERT_P12_PASSWORD }}
+
+      - name: Codesign .app with hardened runtime (notarize path)
+        if: matrix.os == 'macos-latest' && vars.RELEASE_NOTARIZE == 'true'
+        env:
+          SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          codesign \
+            --sign "$SIGN_IDENTITY" \
+            --options runtime \
+            --entitlements build/entitlements.plist \
+            --timestamp \
+            --force \
+            --verbose \
+            DeckCheck.app
+          codesign --verify --deep --strict --verbose=2 DeckCheck.app
+
+      - name: Submit to Apple notary service (notarize path)
+        if: matrix.os == 'macos-latest' && vars.RELEASE_NOTARIZE == 'true'
+        env:
+          NOTARY_KEY_BASE64: ${{ secrets.NOTARY_API_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/notary_key.p8"
+          echo "$NOTARY_KEY_BASE64" | base64 --decode > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          ditto -c -k --keepParent DeckCheck.app DeckCheck-for-notary.zip
+          xcrun notarytool submit DeckCheck-for-notary.zip \
+            --key "$KEY_PATH" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" \
+            --wait \
+            --timeout 30m
+          rm -f "$KEY_PATH"
+
+      - name: Staple notarisation ticket to .app (notarize path)
+        if: matrix.os == 'macos-latest' && vars.RELEASE_NOTARIZE == 'true'
+        run: |
+          xcrun stapler staple DeckCheck.app
+          xcrun stapler validate DeckCheck.app
+
+      - name: Zip stapled .app for distribution (notarize path)
+        if: matrix.os == 'macos-latest' && vars.RELEASE_NOTARIZE == 'true'
+        run: ditto -c -k --keepParent DeckCheck.app deckcheck-darwin-arm64.zip
+
+      - name: Ad-hoc sign .app (fallback path)
+        if: matrix.os == 'macos-latest' && vars.RELEASE_NOTARIZE != 'true'
+        run: codesign --force --deep --sign - DeckCheck.app
+
+      - name: Zip .app for distribution (fallback path)
+        if: matrix.os == 'macos-latest' && vars.RELEASE_NOTARIZE != 'true'
+        run: ditto -c -k --keepParent DeckCheck.app deckcheck-darwin-arm64.zip
+
+      - name: Package Windows
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          go tool fyne package -os windows -name DeckCheck -app-id dev.adbr.deckcheck -app-version "$APP_VERSION" -icon $PWD/internal/assets/icon.png -release -src ./cmd/gui/deckcheck
+          powershell Compress-Archive -Path DeckCheck.exe -DestinationPath deckcheck-windows-amd64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  # Create the tag and GitHub release. Runs for every push to main
+  # (and manual dispatches from main); release notes are generated
+  # from the conventional-commit history.
+  release:
+    needs: [version, build]
+    # Tags are only ever cut from main; a dispatch against a branch
+    # still builds artifacts but stops here.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Checksums
+        run: |
+          find artifacts -type f \( -name '*.zip' -o -name '*.tar.xz' \) -exec sha256sum {} \; \
+            | sed 's| artifacts/.*/| |' > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ needs.version.outputs.version }}" -m "Release ${{ needs.version.outputs.version }}"
+          git push origin "${{ needs.version.outputs.version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.version }}
+          name: Release ${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            artifacts/deckcheck-linux-amd64.tar.xz/deckcheck-linux-amd64.tar.xz
+            artifacts/deckcheck-darwin-arm64.zip/deckcheck-darwin-arm64.zip
+            artifacts/deckcheck-windows-amd64.zip/deckcheck-windows-amd64.zip
+            SHA256SUMS
