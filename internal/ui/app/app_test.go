@@ -824,6 +824,13 @@ func newConfiguredTestApp(t *testing.T, cfg testAppConfig) (*deckapp.App, testDe
 		Recents:       recent.New(fyneApp.Preferences()),
 	})
 
+	// Release any project the test leaves open: Windows cannot remove
+	// a still-open database file during TempDir cleanup.
+	t.Cleanup(func() {
+		controller.WaitForPendingOperations()
+		controller.ForceCloseProject()
+	})
+
 	return controller, testDeps{
 		app:     fyneApp,
 		window:  window,
