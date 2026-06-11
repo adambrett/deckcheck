@@ -825,7 +825,12 @@ func newConfiguredTestApp(t *testing.T, cfg testAppConfig) (*deckapp.App, testDe
 	})
 
 	// Release any project the test leaves open: Windows cannot remove
-	// a still-open database file during TempDir cleanup.
+	// a still-open database file during TempDir cleanup. The TempDir
+	// call pins its RemoveAll registration before this cleanup, and
+	// cleanups run last-in-first-out, so the project closes before
+	// the directory is removed; later t.TempDir() calls in the test
+	// body return subdirectories of the same root.
+	_ = t.TempDir()
 	t.Cleanup(func() {
 		controller.WaitForPendingOperations()
 		controller.ForceCloseProject()
