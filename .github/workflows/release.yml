@@ -103,6 +103,9 @@ jobs:
     env:
       APP_VERSION: ${{ needs.version.outputs.version }}
     strategy:
+      # One platform's failure must not cancel the others mid-build
+      # (a Windows packaging error once aborted macOS notarization).
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -207,6 +210,11 @@ jobs:
         shell: bash
         run: |
           go tool fyne package -os windows -name DeckCheck -app-id dev.adbr.deckcheck -app-version "$APP_VERSION" -icon $PWD/internal/assets/icon.png -release -src ./cmd/gui/deckcheck
+          # fyne writes the Windows exe beside the source package, not
+          # into the working directory like the darwin/linux artifacts.
+          EXE=$(find . -name 'DeckCheck.exe' -not -path './.git/*' | head -1)
+          echo "packaged exe: $EXE"
+          mv "$EXE" DeckCheck.exe
           powershell Compress-Archive -Path DeckCheck.exe -DestinationPath deckcheck-windows-amd64.zip
 
       - name: Upload artifact
