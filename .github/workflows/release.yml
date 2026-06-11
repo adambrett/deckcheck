@@ -184,7 +184,7 @@ jobs:
             --key-id "$NOTARY_KEY_ID" \
             --issuer "$NOTARY_ISSUER_ID" \
             --wait \
-            --timeout 30m
+            --timeout 90m
           rm -f "$KEY_PATH"
 
       - name: Staple notarisation ticket to .app (notarize path)
