@@ -3,7 +3,7 @@
 [![CI](https://github.com/adambrett/deckcheck/actions/workflows/ci.yml/badge.svg)](https://github.com/adambrett/deckcheck/actions/workflows/ci.yml)
 [![License: BSD-3-Clause with Commons Clause](https://img.shields.io/badge/License-BSD--3--Clause%20%2B%20Commons%20Clause-blue.svg)](LICENSE)
 
-DeckCheck is a local-first desktop app for fast, question-based classification over folders of images and CSV rows. It is built for small dataset triage jobs where you need repeatable human judgment, keyboard-first navigation, and a clean CSV export without setting up an annotation platform.
+DeckCheck is a local-first desktop app for fast, question-based classification and lightweight image annotation over folders of images and CSV rows. It is built for small dataset triage jobs where you need repeatable human judgment, keyboard-first navigation, and a clean CSV export without setting up an annotation platform.
 
 ![The classifier mid-session: record on the left, one-keypress answers on the right](docs/screenshots/classifier.png)
 
@@ -22,9 +22,10 @@ Screenshots are software-rendered straight from the real views; regenerate with 
 
 - Create one-file `.deckcheck` projects (DuckDB under the hood) that store the dataset, questions, answers, and classifications.
 - Import plain CSV files, folders of images, or CSV files with an image path column.
-- Define one or more multiple-choice or image-grid questions per project.
+- Define one or more multiple-choice questions per project, or add image annotation questions for image folders and CSVs with image references.
+- Annotate images by clicking grid cells, or drag across cells to select a rectangular area quickly.
 - Classify quickly with number keys, previous/next navigation, skip, and an unclassified-only mode.
-- Export the original rows plus classification answers, grid cell selections, and selected cell pixel bounds as a CSV.
+- Export the original rows plus classification answers, image cell selections, and selected cell pixel bounds as a CSV.
 
 ## Installation
 
@@ -59,8 +60,9 @@ Create a project:
 1. Choose **New Project**.
 2. Pick a `.deckcheck` file path for the project database.
 3. Select a dataset type: CSV file, image folder, or CSV with image references.
-4. Add one or more questions with comma-separated possible answers, or choose an image grid question for cell-based annotations.
-5. Classify each record and export the completed dataset with **Export CSV**.
+4. Add one or more questions. Use **Multiple choice** for answer lists, or **Image annotation** for cell-based labels on image-backed datasets.
+5. For image annotation questions, choose the grid size and select every cell that contains the thing named in the prompt.
+6. Classify each record and export the completed dataset with **Export CSV**. Image annotation exports include the selected cells and their pixel bounds.
 
 Keyboard shortcuts:
 

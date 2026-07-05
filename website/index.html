@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       name="description"
-      content="DeckCheck is a local-first desktop app for fast, question-based classification over folders of images and CSV rows."
+      content="DeckCheck is a local-first desktop app for fast classification and lightweight image annotation over folders of images and CSV rows."
     >
     <meta name="theme-color" content="#eab308">
     <meta property="og:title" content="DeckCheck">
     <meta
       property="og:description"
-      content="Ask repeatable multiple-choice questions. Classify fast. Export clean data."
+      content="Ask repeatable questions, mark image regions with grid cells, and export clean CSV data."
     >
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://deckcheck.adbr.dev/">
@@ -37,10 +37,10 @@
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
           <p class="eyebrow">Local-first dataset triage</p>
-          <h1 id="hero-title">Ask questions. Classify fast. Move on.</h1>
+          <h1 id="hero-title">Ask questions. Mark images. Move on.</h1>
           <p class="lede">
             DeckCheck is a tiny source-available desktop app for turning folders of images and CSV rows
-            into clean classified datasets, one keyboard shortcut at a time.
+            into clean classified and annotated datasets, one focused pass at a time.
           </p>
           <div class="actions" aria-label="Primary actions">
             <a class="primary-action" href="#download">Download DeckCheck</a>
@@ -79,9 +79,9 @@
               </div>
             </div>
             <div class="status-strip">
-              <span>Folder or CSV</span>
+              <span>Images or CSV</span>
               <span><kbd>&larr;</kbd> <kbd>&rarr;</kbd> to move</span>
-              <span>Auto-resume</span>
+              <span>CSV export</span>
             </div>
           </div>
           <p class="shot-note">This preview is live: number keys answer, arrow keys change the photo.</p>
@@ -96,15 +96,23 @@
         <div class="features">
           <article>
             <h3>Images or rows</h3>
-            <p>Open a folder of images or a CSV of data and classify each item in sequence.</p>
+            <p>Open image folders, plain CSVs, or CSVs with an image path column and review each item in sequence.</p>
+          </article>
+          <article>
+            <h3>Image annotation</h3>
+            <p>Ask for objects in an image, choose a grid size, then click or drag across the cells that contain them.</p>
           </article>
           <article>
             <h3>Your questions</h3>
-            <p>Define the multiple-choice questions you actually need, one or many per item.</p>
+            <p>Mix multiple-choice prompts with image annotation prompts, one or many per item.</p>
           </article>
           <article>
             <h3>Keyboard-first flow</h3>
             <p>Answer with <kbd>1</kbd>&ndash;<kbd>9</kbd>, move with arrows, export with <kbd>&#8984;E</kbd>. Mistakes are one keypress back.</p>
+          </article>
+          <article>
+            <h3>Clean CSV export</h3>
+            <p>Export source data, answers, selected image cells, and the selected cells' pixel bounds together.</p>
           </article>
           <article>
             <h3>Resumes where you left off</h3>
@@ -116,13 +124,42 @@
       <section class="positioning" aria-labelledby="positioning-title">
         <div>
           <p class="eyebrow">No platform ceremony</p>
-          <h2 id="positioning-title">Not an annotation suite. Not an AI pipeline.</h2>
+          <h2 id="positioning-title">Not an enterprise labeling platform. Not an AI pipeline.</h2>
         </div>
         <p>
           DeckCheck is for the small, sharp classification jobs that should not require servers,
-          accounts, Docker, bounding boxes, collaboration layers, or enterprise workflow.
-          Open data, answer structured questions, export the result as CSV.
+          accounts, Docker, collaboration layers, or enterprise workflow. Open data, answer structured
+          questions, mark image cells when you need visual labels, export the result as CSV.
         </p>
+      </section>
+
+      <section class="annotation-story" aria-labelledby="annotation-title">
+        <div class="annotation-copy">
+          <p class="eyebrow">For visual datasets</p>
+          <h2 id="annotation-title">Cell annotations when a yes/no answer is not enough.</h2>
+          <p>
+            Add an image annotation question like "click every cell containing a bird", then mark the
+            cells directly on the image. DeckCheck stores both the selected cells and their pixel bounds
+            so the exported CSV is ready for downstream training data.
+          </p>
+        </div>
+        <figure class="annotation-preview">
+          <div class="annotation-frame">
+            <img src="assets/bird-2.jpg" width="900" height="601" alt="Green parakeet used as an example image annotation record">
+            <div class="annotation-grid" aria-hidden="true">
+              <span></span>
+              <span class="selected"></span>
+              <span class="selected"></span>
+              <span></span>
+              <span class="selected"></span>
+              <span class="selected"></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+          <figcaption>Click cells one by one, or drag across a rectangular selection.</figcaption>
+        </figure>
       </section>
 
       <section class="download" id="download" aria-labelledby="download-title">

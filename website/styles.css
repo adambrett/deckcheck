@@ -520,6 +520,76 @@ kbd {
   line-height: 1.6;
 }
 
+/* ---------- annotation preview ---------- */
+
+.annotation-story {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.85fr) minmax(0, 1.15fr);
+  gap: clamp(1.5rem, 4vw, 4rem);
+  align-items: center;
+  width: min(var(--container), 100% - 2.5rem);
+  margin-inline: auto;
+  padding-top: var(--space-4);
+  padding-bottom: var(--section);
+  border-top: 1px solid var(--gray-700);
+}
+
+.annotation-copy h2 {
+  font-size: var(--text-2xl);
+}
+
+.annotation-copy p:last-child {
+  margin: 0;
+  color: var(--gray-300);
+  font-size: var(--text-lg);
+  line-height: 1.6;
+}
+
+.annotation-preview {
+  margin: 0;
+}
+
+.annotation-frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--gray-700);
+  border-radius: 10px;
+  background: var(--gray-950);
+  box-shadow: 0 24px 70px oklch(5% 0.02 265 / 50%);
+}
+
+.annotation-frame img {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+.annotation-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.annotation-grid span {
+  border: 1px solid oklch(97% 0.005 95 / 72%);
+  background: oklch(13.5% 0.015 265 / 18%);
+}
+
+.annotation-grid span.selected {
+  border-color: var(--yellow-400);
+  background: oklch(80% 0.16 90 / 36%);
+  box-shadow: inset 0 0 0 2px oklch(97% 0.005 95 / 55%);
+}
+
+.annotation-preview figcaption {
+  margin-top: var(--space-1);
+  color: var(--gray-400);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+
 /* ---------- download ---------- */
 
 .download {
@@ -609,6 +679,15 @@ footer a:hover {
   .positioning {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .annotation-story {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .annotation-preview figcaption {
+    text-align: left;
   }
 }
 
