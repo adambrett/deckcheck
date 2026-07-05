@@ -1,5 +1,5 @@
-# Required secrets and variables for macOS notarisation (configure in GitHub repo
-# Settings → Secrets and variables → Actions before flipping RELEASE_NOTARIZE=true):
+# Required secrets and variables for release automation (configure in GitHub repo
+# Settings → Secrets and variables → Actions).
 #
 # Secrets:
 #   MACOS_CERT_P12_BASE64    - Developer ID Application cert + private key exported from
@@ -14,6 +14,8 @@
 #                              Integrations → Team Keys. (`base64 -i AuthKey_XXX.p8 | pbcopy`)
 #   NOTARY_API_KEY_ID        - 10-character alphanumeric Key ID from App Store Connect Team Keys
 #   NOTARY_API_ISSUER_ID     - UUID Issuer ID from App Store Connect (above the Team Keys table)
+#   HOMEBREW_TAP_TOKEN       - Fine-grained GitHub token with Contents read/write
+#                              access to adambrett/homebrew-tap.
 #
 # Variable (non-sensitive; set in the Variables tab, not Secrets tab):
 #   RELEASE_NOTARIZE         - Set to the string "true" to enable the notarisation path.
@@ -266,3 +268,49 @@ jobs:
             artifacts/deckcheck-darwin-arm64.zip/deckcheck-darwin-arm64.zip
             artifacts/deckcheck-windows-amd64.zip/deckcheck-windows-amd64.zip
             SHA256SUMS
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: adambrett/homebrew-tap
+          path: homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Update Homebrew cask
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          CASK_PATH="homebrew-tap/Casks/deckcheck.rb"
+          DARWIN_SHA256=$(awk '$2 == "deckcheck-darwin-arm64.zip" { print $1 }' SHA256SUMS)
+
+          if [ -z "$DARWIN_SHA256" ]; then
+            echo "Could not find deckcheck-darwin-arm64.zip checksum in SHA256SUMS"
+            exit 1
+          fi
+
+          ruby - "$CASK_PATH" "$VERSION" "$DARWIN_SHA256" <<'RUBY'
+          path, version, sha256 = ARGV
+          content = File.read(path)
+
+          abort "version line not found in #{path}" unless content.sub!(/^\s*version\s+"[^"]+"/, "  version \"#{version}\"")
+          abort "sha256 line not found in #{path}" unless content.sub!(/^\s*sha256\s+"[^"]+"/, "  sha256 \"#{sha256}\"")
+
+          File.write(path, content)
+          RUBY
+
+      - name: Commit Homebrew tap update
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "Homebrew cask is already up to date."
+            exit 0
+          fi
+
+          git add Casks/deckcheck.rb
+          git commit -m "Update deckcheck to ${VERSION}"
+          git push
