@@ -84,6 +84,45 @@ func TestPanelHandlesNoQuestions(t *testing.T) {
 	require.True(t, panel.AllAnswered())
 }
 
+func TestPanelSavesGridSelection(t *testing.T) {
+	// Given
+	test.NewApp()
+
+	var savedQuestionID int
+	var savedValue string
+	panel := answers.New([]project.Question{
+		{
+			ID:          1,
+			Kind:        project.QuestionKindImageGrid,
+			Text:        "Cars?",
+			GridRows:    3,
+			GridColumns: 3,
+		},
+	}, answers.Handlers{
+		GridSaved: func(questionID int, value string) {
+			savedQuestionID = questionID
+			savedValue = value
+		},
+	})
+
+	// When the image overlay reports pending cells
+	panel.SetGridSelection(1, "A1 C2")
+
+	// Then the panel keeps the pending value internally without
+	// cluttering the answer screen.
+	require.False(t, fynetest.HasTextContaining(panel.Container(), "Selected cells"))
+	require.False(t, fynetest.HasTextContaining(panel.Container(), "3 x 3 image grid"))
+	require.False(t, panel.AllAnswered())
+
+	// When
+	fynetest.TapButton(t, panel.Container(), "Save grid selection")
+
+	// Then
+	require.Equal(t, 1, savedQuestionID)
+	require.Equal(t, "A1 C2", savedValue)
+	require.True(t, panel.AllAnswered())
+}
+
 func TestPanelTapTogglesAnswerSelection(t *testing.T) {
 	// Given a panel with a single two-answer question
 	test.NewApp()

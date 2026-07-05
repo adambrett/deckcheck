@@ -33,7 +33,7 @@ var (
 
 const (
 	viewWidth  = 720
-	viewHeight = 480
+	viewHeight = 580
 )
 
 // Result contains the data collected from all wizard steps.

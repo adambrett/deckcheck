@@ -6,9 +6,27 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/lang"
 	fyneTheme "fyne.io/fyne/v2/theme"
+
+	"github.com/adambrett/deckcheck/internal/dataset"
 )
 
+type stepBacker interface {
+	Back() bool
+}
+
+type stepAdvancer interface {
+	Advance() (handled, valid bool)
+}
+
+type stepNextReporter interface {
+	HasNext() bool
+}
+
 func (v *View) updateUI() {
+	if v.steps[v.currentStep] == v.questionsStep {
+		v.questionsStep.SetImageAnnotationsEnabled(v.datasetStep.SelectedType() != dataset.TypeCSV)
+	}
+
 	v.titleLabel.SetText(v.steps[v.currentStep].Title())
 	v.stepLabel.SetText(fmt.Sprintf(lang.L("Step %d of %d"), v.currentStep+1, len(v.steps)))
 	v.progressBar.SetValue(float64(v.currentStep + 1))
@@ -22,7 +40,7 @@ func (v *View) updateUI() {
 		v.prevBtn.Enable()
 	}
 
-	if v.currentStep == len(v.steps)-1 {
+	if v.currentStep == len(v.steps)-1 && !v.currentStepHasNext() {
 		v.nextBtn.SetText(lang.L("Finish"))
 		v.nextBtn.SetIcon(fyneTheme.ConfirmIcon())
 	} else {
@@ -32,6 +50,11 @@ func (v *View) updateUI() {
 }
 
 func (v *View) previous() {
+	if current, ok := v.steps[v.currentStep].(stepBacker); ok && current.Back() {
+		v.updateUI()
+		return
+	}
+
 	if v.currentStep > 0 {
 		v.currentStep--
 		v.updateUI()
@@ -83,6 +106,17 @@ func (v *View) hasInput() bool {
 }
 
 func (v *View) next() {
+	if current, ok := v.steps[v.currentStep].(stepAdvancer); ok {
+		handled, valid := current.Advance()
+		if !valid {
+			return
+		}
+		if handled {
+			v.updateUI()
+			return
+		}
+	}
+
 	if !v.steps[v.currentStep].Validate() {
 		return
 	}
@@ -94,6 +128,11 @@ func (v *View) next() {
 	}
 
 	v.finish()
+}
+
+func (v *View) currentStepHasNext() bool {
+	current, ok := v.steps[v.currentStep].(stepNextReporter)
+	return ok && current.HasNext()
 }
 
 func (v *View) finish() {

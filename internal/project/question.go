@@ -2,13 +2,34 @@ package project
 
 import "strings"
 
+// QuestionKind describes how a question is answered.
+type QuestionKind string
+
+const (
+	// QuestionKindChoice is the existing multiple-choice question type.
+	QuestionKindChoice QuestionKind = "choice"
+	// QuestionKindImageGrid asks the classifier to select cells from an
+	// image overlay grid.
+	QuestionKindImageGrid QuestionKind = "image_grid"
+)
+
+const (
+	DefaultGridRows    = 3
+	DefaultGridColumns = 3
+	MinGridSize        = 2
+	MaxGridSize        = 12
+)
+
 // Question is one classification question with its possible Answers. The
 // IDs are stable across an open project and used to reference questions
 // and answers in persisted classifications.
 type Question struct {
-	ID      int
-	Text    string
-	Answers []Answer
+	ID          int
+	Kind        QuestionKind
+	Text        string
+	GridRows    int
+	GridColumns int
+	Answers     []Answer
 }
 
 // Answer is one selectable choice for a [Question].
@@ -21,8 +42,38 @@ type Answer struct {
 // persisted. The wizard collects these from the user before project-file
 // creation.
 type QuestionDef struct {
-	Text    string
-	Answers []string
+	Kind        QuestionKind
+	Text        string
+	GridRows    int
+	GridColumns int
+	Answers     []string
+}
+
+// Normalized returns q with zero-value fields expanded to the defaults
+// used by the wizard and project-file creation.
+func (q QuestionDef) Normalized() QuestionDef {
+	if q.Kind == "" {
+		q.Kind = QuestionKindChoice
+	}
+	if q.Kind == QuestionKindImageGrid {
+		if q.GridRows == 0 {
+			q.GridRows = DefaultGridRows
+		}
+		if q.GridColumns == 0 {
+			q.GridColumns = DefaultGridColumns
+		}
+	}
+	return q
+}
+
+// Valid reports whether the question kind is one DeckCheck understands.
+func (k QuestionKind) Valid() bool {
+	switch k {
+	case QuestionKindChoice, QuestionKindImageGrid:
+		return true
+	default:
+		return false
+	}
 }
 
 // ParseAnswers splits a comma-separated answer list into trimmed,

@@ -12,7 +12,7 @@ import (
 // given transaction. Questions are only ever created through [Create];
 // there is deliberately no post-creation question API because changing
 // the question set would invalidate existing classifications.
-func insertQuestion(ctx context.Context, tx *sql.Tx, projectID int, text string, answers []string) (*project.Question, error) {
+func insertQuestion(ctx context.Context, tx *sql.Tx, projectID int, def project.QuestionDef) (*project.Question, error) {
 	var maxOrder int
 	if err := tx.QueryRowContext(ctx,
 		"SELECT COALESCE(MAX(sort_order), 0) FROM questions WHERE project_id = ?", projectID,
@@ -22,14 +22,23 @@ func insertQuestion(ctx context.Context, tx *sql.Tx, projectID int, text string,
 
 	var questionID int
 	if err := tx.QueryRowContext(ctx,
-		"INSERT INTO questions (project_id, question_text, sort_order) VALUES (?, ?, ?) RETURNING id",
-		projectID, text, maxOrder+1,
+		`INSERT INTO questions (
+			project_id, question_text, question_kind, grid_rows, grid_columns, sort_order
+		) VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
+		projectID, def.Text, string(def.Kind), def.GridRows, def.GridColumns, maxOrder+1,
 	).Scan(&questionID); err != nil {
 		return nil, fmt.Errorf("insert question: %w", err)
 	}
 
-	out := &project.Question{ID: questionID, Text: text, Answers: make([]project.Answer, 0, len(answers))}
-	for i, answerText := range answers {
+	out := &project.Question{
+		ID:          questionID,
+		Kind:        def.Kind,
+		Text:        def.Text,
+		GridRows:    def.GridRows,
+		GridColumns: def.GridColumns,
+		Answers:     make([]project.Answer, 0, len(def.Answers)),
+	}
+	for i, answerText := range def.Answers {
 		var answerID int
 		if err := tx.QueryRowContext(ctx,
 			"INSERT INTO answers (question_id, answer_text, sort_order) VALUES (?, ?, ?) RETURNING id",
@@ -54,7 +63,8 @@ func (p *Project) Questions(ctx context.Context) ([]project.Question, error) {
 	}
 
 	rows, err := conn.QueryContext(ctx, `
-		SELECT q.id, q.question_text, q.sort_order, a.id, a.answer_text, a.sort_order
+		SELECT q.id, q.question_text, q.question_kind, q.grid_rows, q.grid_columns, q.sort_order,
+		       a.id, a.answer_text, a.sort_order
 		FROM questions q
 		LEFT JOIN answers a ON a.question_id = q.id
 		WHERE q.project_id = ?
@@ -69,13 +79,13 @@ func (p *Project) Questions(ctx context.Context) ([]project.Question, error) {
 	indexByID := make(map[int]int)
 	for rows.Next() {
 		var (
-			qID, qSort int
-			qText      string
-			aID        sql.NullInt64
-			aText      sql.NullString
-			aSort      sql.NullInt64
+			qID, qRows, qColumns, qSort int
+			qText, qKind                string
+			aID                         sql.NullInt64
+			aText                       sql.NullString
+			aSort                       sql.NullInt64
 		)
-		if err := rows.Scan(&qID, &qText, &qSort, &aID, &aText, &aSort); err != nil {
+		if err := rows.Scan(&qID, &qText, &qKind, &qRows, &qColumns, &qSort, &aID, &aText, &aSort); err != nil {
 			return nil, fmt.Errorf("scan question row: %w", err)
 		}
 
@@ -83,7 +93,13 @@ func (p *Project) Questions(ctx context.Context) ([]project.Question, error) {
 		if !ok {
 			idx = len(questions)
 			indexByID[qID] = idx
-			questions = append(questions, project.Question{ID: qID, Text: qText})
+			questions = append(questions, project.Question{
+				ID:          qID,
+				Kind:        project.QuestionKind(qKind),
+				Text:        qText,
+				GridRows:    qRows,
+				GridColumns: qColumns,
+			})
 		}
 		if aID.Valid {
 			questions[idx].Answers = append(questions[idx].Answers, project.Answer{

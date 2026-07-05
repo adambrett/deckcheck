@@ -6,9 +6,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 	"github.com/stretchr/testify/require"
 
 	"github.com/adambrett/deckcheck/internal/dataset"
@@ -108,7 +111,7 @@ func TestWizardCompletesForEachDatasetType(t *testing.T) {
 			require.Equal(t, tt.wantType, got.DatasetType)
 			require.Equal(t, tt.imageColumn, got.ImageColumn)
 			require.Equal(t, []project.QuestionDef{
-				{Text: "Useful?", Answers: []string{"Yes", "No"}},
+				{Kind: project.QuestionKindChoice, Text: "Useful?", Answers: []string{"Yes", "No"}},
 			}, got.Questions)
 		})
 	}
@@ -237,6 +240,126 @@ func TestWizardNavigatesBackAndRetainsInput(t *testing.T) {
 	fynetest.RequireEntryValue(t, root, "My Classification Project", "Retain Me")
 }
 
+func TestWizardNavigatesBetweenQuestionsBeforeFinishing(t *testing.T) {
+	// Given a wizard on the questions step with two questions
+	test.NewApp()
+	tmpDir := t.TempDir()
+	projectPath := filepath.Join(tmpDir, "project.deckcheck")
+	csvPath := writeFile(t, tmpDir, "data.csv", "name\nhello\n")
+
+	view := wizard.New(wizard.Config{
+		ProjectPicker: &fynetest.StubPicker{SavePath: projectPath},
+		DatasetPicker: &fynetest.StubPicker{OpenPath: csvPath},
+		Handlers:      wizard.Handlers{},
+	})
+	require.NoError(t, view.Activate())
+	root := view.Container()
+
+	fynetest.TypeEntry(t, root, "My Classification Project", "Question Navigation")
+	fynetest.TapButton(t, root, "Choose file…")
+	fynetest.TapButton(t, root, "Next")
+	fynetest.TapButton(t, root, "Choose file…")
+	fynetest.TapButton(t, root, "Next")
+
+	fynetest.TypeEntry(t, root, "e.g., What is the sentiment?", "First?")
+	fynetest.TypeEntry(t, root, "e.g., Positive, Negative, Neutral", "Yes, No")
+	fynetest.TapButton(t, root, "Add Question")
+	fynetest.TypeEntry(t, root, "e.g., What is the sentiment?", "Second?")
+	fynetest.TypeEntry(t, root, "e.g., Positive, Negative, Neutral", "A, B")
+
+	// When moving back from the second question
+	fynetest.TapButton(t, root, "Previous")
+
+	// Then the wizard stays on the questions step and the primary
+	// action is Next, not Finish, until the last question is active.
+	fynetest.RequireText(t, root, "Question 1 of 2")
+	fynetest.ButtonWithText(t, root, "Next")
+
+	// When moving forward again
+	fynetest.TapButton(t, root, "Next")
+
+	// Then the final question can finish the wizard.
+	fynetest.RequireText(t, root, "Question 2 of 2")
+	fynetest.ButtonWithText(t, root, "Finish")
+}
+
+func TestWizardQuestionTypesFollowDatasetType(t *testing.T) {
+	// Given
+	tests := []struct {
+		name          string
+		radioLabel    string
+		fixture       func(t *testing.T, dir string) string
+		imageColumn   string
+		datasetType   dataset.Type
+		wantImageType bool
+	}{
+		{
+			name: "csv",
+			fixture: func(t *testing.T, dir string) string {
+				t.Helper()
+				return writeFile(t, dir, "data.csv", "text\nhello\n")
+			},
+			datasetType: dataset.TypeCSV,
+		},
+		{
+			name:       "image folder",
+			radioLabel: "Image Folder",
+			fixture: func(t *testing.T, dir string) string {
+				t.Helper()
+				imageDir := filepath.Join(dir, "images")
+				require.NoError(t, os.MkdirAll(imageDir, 0o755))
+				writeFile(t, imageDir, "photo.png", "fake")
+				return imageDir
+			},
+			datasetType:   dataset.TypeImages,
+			wantImageType: true,
+		},
+		{
+			name:       "csv with images",
+			radioLabel: "CSV with Image References",
+			fixture: func(t *testing.T, dir string) string {
+				t.Helper()
+				return writeFile(t, dir, "images.csv", "text,image\nhello,photo.png\n")
+			},
+			imageColumn:   "image",
+			datasetType:   dataset.TypeCSVWithImage,
+			wantImageType: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Given a wizard that can reach the questions step for this dataset type.
+			test.NewApp()
+			tmpDir := t.TempDir()
+			view := wizard.New(wizard.Config{
+				ProjectPicker: &fynetest.StubPicker{SavePath: filepath.Join(tmpDir, "project.deckcheck")},
+				DatasetPicker: &fynetest.StubPicker{OpenPath: tt.fixture(t, tmpDir)},
+			})
+			require.NoError(t, view.Activate())
+			root := view.Container()
+
+			// When navigating to the questions step.
+			fynetest.TypeEntry(t, root, "My Classification Project", "Types")
+			fynetest.TapButton(t, root, "Choose file…")
+			fynetest.TapButton(t, root, "Next")
+			if tt.radioLabel != "" {
+				fynetest.SelectRadio(t, root, tt.radioLabel)
+			}
+			fynetest.TapButton(t, root, browseLabelFor(tt.datasetType))
+			view.WaitForPendingOperations()
+			if tt.imageColumn != "" {
+				fynetest.SelectOption(t, root, tt.imageColumn)
+			}
+			fynetest.TapButton(t, root, "Next")
+
+			// Then image annotation is only offered for image-backed datasets.
+			options := questionTypeOptions(t, root)
+			require.Equal(t, tt.wantImageType, slices.Contains(options, "Image annotation"))
+		})
+	}
+}
+
 func TestWizardDropsCSVHeaderResultAfterClose(t *testing.T) {
 	// Given a wizard whose CSV probe fires after the view is closed.
 	// Close() cancels v.ctx, so LoadHeaders returns context.Canceled.
@@ -274,6 +397,21 @@ func TestWizardDropsCSVHeaderResultAfterClose(t *testing.T) {
 
 	// Then the late callback is dropped and no error dialog appears.
 	require.False(t, errorCalled)
+}
+
+func questionTypeOptions(t *testing.T, root fyne.CanvasObject) []string {
+	t.Helper()
+
+	var options []string
+	fynetest.Walk(root, func(obj fyne.CanvasObject) {
+		selectWidget, ok := obj.(*widget.Select)
+		if ok && slices.Contains(selectWidget.Options, "Multiple choice") {
+			options = append([]string(nil), selectWidget.Options...)
+		}
+	})
+	require.NotEmpty(t, options, "question type dropdown not found")
+
+	return options
 }
 
 func TestWizardWithParentContextScopesCSVProbe(t *testing.T) {

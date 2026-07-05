@@ -20,7 +20,7 @@ func (v *View) LoadRecord(index int) error {
 	v.currentRecord = record
 
 	v.recordDisplay.SetRecord(record)
-	v.answerPanel.SetSelections(record.Answers)
+	v.answerPanel.SetRecordState(record.Answers, record.GridAnnotations)
 	v.statusLabel.SetText("")
 
 	v.updateNavigation()

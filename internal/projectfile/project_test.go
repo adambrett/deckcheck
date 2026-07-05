@@ -239,6 +239,43 @@ func TestCreateRejectsInvalidProjectOptions(t *testing.T) {
 			},
 			want: projectfile.ErrInvalidQuestion,
 		},
+		{
+			name: "unsupported question kind",
+			opts: projectfile.CreateOptions{
+				Name:        "Test",
+				DatasetType: dataset.TypeCSV,
+				Questions:   []project.QuestionDef{{Kind: project.QuestionKind("unknown"), Text: "Valid?"}},
+			},
+			want: projectfile.ErrInvalidQuestion,
+		},
+		{
+			name: "image annotation on csv dataset",
+			opts: projectfile.CreateOptions{
+				Name:        "Test",
+				DatasetType: dataset.TypeCSV,
+				Questions: []project.QuestionDef{{
+					Kind:        project.QuestionKindImageGrid,
+					Text:        "Cars?",
+					GridRows:    3,
+					GridColumns: 3,
+				}},
+			},
+			want: projectfile.ErrInvalidQuestion,
+		},
+		{
+			name: "image grid too small",
+			opts: projectfile.CreateOptions{
+				Name:        "Test",
+				DatasetType: dataset.TypeImages,
+				Questions: []project.QuestionDef{{
+					Kind:        project.QuestionKindImageGrid,
+					Text:        "Cars?",
+					GridRows:    1,
+					GridColumns: 3,
+				}},
+			},
+			want: projectfile.ErrInvalidQuestion,
+		},
 	}
 
 	for _, tc := range cases {
@@ -325,6 +362,84 @@ func TestQuestionsRoundTrip(t *testing.T) {
 	require.Len(t, questions[0].Answers, 2)
 	require.Equal(t, "A", questions[0].Answers[0].Text)
 	require.Equal(t, "Second?", questions[1].Text)
+}
+
+func TestImageGridQuestionsAndAnnotations(t *testing.T) {
+	// Given
+	p := createImageCSVProjectWithData(t, "text,image\nhello,photo.png\n", []project.QuestionDef{
+		{
+			Kind:        project.QuestionKindImageGrid,
+			Text:        "Cars?",
+			GridRows:    3,
+			GridColumns: 3,
+		},
+		{Text: "Valid?", Answers: []string{"Yes", "No"}},
+	})
+	questions, err := p.Questions(context.Background())
+	require.NoError(t, err)
+	gridQuestion, choiceQuestion := questions[0], questions[1]
+	require.Equal(t, project.QuestionKindImageGrid, gridQuestion.Kind)
+	require.Equal(t, 3, gridQuestion.GridRows)
+	require.Equal(t, 3, gridQuestion.GridColumns)
+	require.Empty(t, gridQuestion.Answers)
+
+	record, err := p.Record(context.Background(), 0)
+	require.NoError(t, err)
+
+	// When / Then cross-type saves are rejected.
+	err = p.SaveClassification(context.Background(), record.ID, gridQuestion.ID, choiceQuestion.Answers[0].ID)
+	require.ErrorIs(t, err, projectfile.ErrInvalidClassification)
+	err = p.SaveGridAnnotation(context.Background(), record.ID, choiceQuestion.ID, "A1")
+	require.ErrorIs(t, err, projectfile.ErrInvalidClassification)
+
+	// When saving a grid annotation with duplicates and loose ordering.
+	require.NoError(t, p.SaveGridAnnotation(context.Background(), record.ID, gridQuestion.ID, "C2 A1 A1"))
+
+	// Then the stored value is normalized and counts once paired with
+	// the remaining choice answer.
+	record, err = p.Record(context.Background(), 0)
+	require.NoError(t, err)
+	require.Equal(t, "A1 C2", record.GridAnnotations[gridQuestion.ID])
+
+	classified, total, err := p.Progress(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, classified)
+	require.Equal(t, 1, total)
+
+	require.NoError(t, p.SaveClassification(context.Background(), record.ID, choiceQuestion.ID, choiceQuestion.Answers[0].ID))
+
+	classified, total, err = p.Progress(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, classified)
+	require.Equal(t, 1, total)
+
+	var rows []project.ClassifiedRecord
+	for rec, err := range p.ClassifiedRecords(context.Background(), questions) {
+		require.NoError(t, err)
+		rows = append(rows, rec)
+	}
+	require.Len(t, rows, 1)
+	require.Equal(t, "A1 C2", rows[0].GridAnnotations[gridQuestion.ID])
+	require.Equal(t, "Yes", rows[0].Answers[choiceQuestion.ID])
+}
+
+func TestSaveGridAnnotationRejectsInvalidCells(t *testing.T) {
+	// Given
+	p := createImageCSVProjectWithData(t, "text,image\nhello,photo.png\n", []project.QuestionDef{{
+		Kind:        project.QuestionKindImageGrid,
+		Text:        "Cars?",
+		GridRows:    3,
+		GridColumns: 3,
+	}})
+	question := firstQuestion(t, p)
+	record, err := p.Record(context.Background(), 0)
+	require.NoError(t, err)
+
+	// When
+	err = p.SaveGridAnnotation(context.Background(), record.ID, question.ID, "D1")
+
+	// Then
+	require.ErrorIs(t, err, projectfile.ErrInvalidClassification)
 }
 
 func TestRecordsAndClassifications(t *testing.T) {
@@ -631,6 +746,18 @@ func createProjectWithData(t *testing.T, csvContent string, questions []project.
 	})
 }
 
+func createImageCSVProjectWithData(t *testing.T, csvContent string, questions []project.QuestionDef) *projectfile.Project {
+	t.Helper()
+
+	return createProject(t, projectfile.CreateOptions{
+		Name:        "Test",
+		DatasetType: dataset.TypeCSVWithImage,
+		ImageColumn: "image",
+		Questions:   questions,
+		Source:      imageCSVSource(t, csvContent),
+	})
+}
+
 func singleQuestion() []project.QuestionDef {
 	return []project.QuestionDef{{Text: "Q1", Answers: []string{"A", "B"}}}
 }
@@ -652,6 +779,15 @@ func csvSource(t *testing.T, content string) dataset.Source {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	return dataset.NewCSV(path)
+}
+
+func imageCSVSource(t *testing.T, content string) dataset.Source {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "test.csv")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	return dataset.NewImageCSV(path, "image")
 }
 
 // datasetSource is an in-memory Source for exercising import column rules.

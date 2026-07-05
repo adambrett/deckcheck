@@ -202,7 +202,7 @@ func createInTx(ctx context.Context, conn *sql.DB, opts CreateOptions) (project.
 	}
 
 	for _, q := range opts.Questions {
-		if _, err := insertQuestion(ctx, tx, info.ID, q.Text, q.Answers); err != nil {
+		if _, err := insertQuestion(ctx, tx, info.ID, q); err != nil {
 			return project.Info{}, fmt.Errorf("add question: %w", err)
 		}
 	}

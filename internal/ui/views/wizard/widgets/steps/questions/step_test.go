@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/adambrett/deckcheck/internal/fynetest"
+	"github.com/adambrett/deckcheck/internal/project"
 	questionstep "github.com/adambrett/deckcheck/internal/ui/views/wizard/widgets/steps/questions"
 )
 
@@ -37,8 +38,8 @@ func TestStepValidationDataAddAndReset(t *testing.T) {
 	// When
 	fynetest.TapButton(t, step.Container(), "Add Question")
 	entries = entriesByPlaceholder(step.Container())
-	entries["e.g., What is the sentiment?"][1].SetText("Second?")
-	entries["e.g., Positive, Negative, Neutral"][1].SetText("A, B, ")
+	entries["e.g., What is the sentiment?"][0].SetText("Second?")
+	entries["e.g., Positive, Negative, Neutral"][0].SetText("A, B, ")
 
 	data := step.Data()
 
@@ -72,6 +73,28 @@ func TestStepValidateRejectsDuplicateAnswers(t *testing.T) {
 
 	// Then
 	require.True(t, step.Validate())
+}
+
+func TestStepCollectsImageGridQuestion(t *testing.T) {
+	// Given
+	test.NewApp()
+	step := questionstep.New()
+	entries := entriesByPlaceholder(step.Container())
+
+	// When
+	fynetest.SelectOption(t, step.Container(), "Image annotation")
+	entries = entriesByPlaceholder(step.Container())
+	entries["e.g., Click every cell containing a car"][0].SetText("Click every cell with a car")
+
+	// Then a grid question does not require answer choices.
+	require.True(t, step.Validate())
+	data := step.Data()
+	require.Equal(t, []project.QuestionDef{{
+		Kind:        project.QuestionKindImageGrid,
+		Text:        "Click every cell with a car",
+		GridRows:    project.DefaultGridRows,
+		GridColumns: project.DefaultGridColumns,
+	}}, data.Questions)
 }
 
 func TestStepHasInputTracksUserEntries(t *testing.T) {
@@ -109,39 +132,68 @@ func TestStepHasInputTracksUserEntries(t *testing.T) {
 	require.True(t, step.HasInput())
 }
 
+func TestStepNavigatesBetweenQuestions(t *testing.T) {
+	// Given two valid questions where the second is currently visible
+	test.NewApp()
+	step := questionstep.New()
+	entries := entriesByPlaceholder(step.Container())
+	entries["e.g., What is the sentiment?"][0].SetText("First?")
+	entries["e.g., Positive, Negative, Neutral"][0].SetText("Yes, No")
+	fynetest.TapButton(t, step.Container(), "Add Question")
+	entries = entriesByPlaceholder(step.Container())
+	entries["e.g., What is the sentiment?"][0].SetText("Second?")
+	entries["e.g., Positive, Negative, Neutral"][0].SetText("A, B")
+
+	// When moving back to the previous question
+	require.True(t, step.Back())
+
+	// Then
+	fynetest.RequireLabel(t, step.Container(), "Question 1 of 2")
+	require.True(t, step.HasNext())
+
+	// When advancing again
+	handled, valid := step.Advance()
+
+	// Then
+	require.True(t, handled)
+	require.True(t, valid)
+	fynetest.RequireLabel(t, step.Container(), "Question 2 of 2")
+	require.False(t, step.HasNext())
+}
+
 func TestStepRemoveQuestionRenumbersAndGuardsLastRow(t *testing.T) {
 	// Given three filled question rows
 	test.NewApp()
 	step := questionstep.New()
-	fynetest.TapButton(t, step.Container(), "Add Question")
-	fynetest.TapButton(t, step.Container(), "Add Question")
-
 	entries := entriesByPlaceholder(step.Container())
-	texts := entries["e.g., What is the sentiment?"]
-	require.Len(t, texts, 3)
-	texts[0].SetText("First?")
-	texts[1].SetText("Second?")
-	texts[2].SetText("Third?")
-	fynetest.RequireLabel(t, step.Container(), "Question 3")
+	entries["e.g., What is the sentiment?"][0].SetText("First?")
+	fynetest.TapButton(t, step.Container(), "Add Question")
+	entries = entriesByPlaceholder(step.Container())
+	entries["e.g., What is the sentiment?"][0].SetText("Second?")
+	fynetest.TapButton(t, step.Container(), "Add Question")
+	entries = entriesByPlaceholder(step.Container())
+	entries["e.g., What is the sentiment?"][0].SetText("Third?")
+	fynetest.RequireLabel(t, step.Container(), "Question 3 of 3")
+
+	require.True(t, step.Back())
 
 	// When removing the middle question via its icon-only remove button
 	removeButtons := iconOnlyButtons(step.Container())
-	require.Len(t, removeButtons, 3)
-	test.Tap(removeButtons[1])
+	require.Len(t, removeButtons, 1)
+	test.Tap(removeButtons[0])
 
 	// Then the remaining questions close ranks and renumber.
 	data := step.Data()
 	require.Len(t, data.Questions, 2)
 	require.Equal(t, "First?", data.Questions[0].Text)
 	require.Equal(t, "Third?", data.Questions[1].Text)
-	fynetest.RequireLabel(t, step.Container(), "Question 1")
-	fynetest.RequireLabel(t, step.Container(), "Question 2")
-	fynetest.RequireNoLabel(t, step.Container(), "Question 3")
+	fynetest.RequireLabel(t, step.Container(), "Question 2 of 2")
+	fynetest.RequireNoLabel(t, step.Container(), "Question 3 of 3")
 
 	// When removing down to a single question
 	removeButtons = iconOnlyButtons(step.Container())
-	require.Len(t, removeButtons, 2)
-	test.Tap(removeButtons[1])
+	require.Len(t, removeButtons, 1)
+	test.Tap(removeButtons[0])
 
 	// Then the last row's remove button is disabled so one question remains.
 	removeButtons = iconOnlyButtons(step.Container())

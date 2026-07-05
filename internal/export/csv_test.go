@@ -3,7 +3,11 @@ package export_test
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"errors"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"iter"
 	"os"
@@ -79,6 +83,83 @@ func TestCSVWritePreservesSourceColumnOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, rows)
 	require.Equal(t, "z,a,m\nlast,first,middle\n", writer.String())
+}
+
+func TestCSVWriteIncludesGridAnnotations(t *testing.T) {
+	// Given
+	currentProject := mocks.NewExportProject(t)
+	questions := []project.Question{
+		{ID: 1, Kind: project.QuestionKindChoice, Text: "Sentiment?"},
+		{ID: 2, Kind: project.QuestionKindImageGrid, Text: "Cars?", GridRows: 3, GridColumns: 3},
+	}
+	writer := &bufferWriteCloser{}
+	imagePath := writePNG(t, 100, 100)
+
+	currentProject.EXPECT().Questions(mock.Anything).Return(questions, nil).Once()
+	currentProject.EXPECT().DataColumns().Return([]string{"image"}).Once()
+	currentProject.EXPECT().
+		ClassifiedRecords(mock.Anything, questions).
+		Return(classifiedRecords(project.ClassifiedRecord{
+			Data:            map[string]string{"image": "street.jpg"},
+			ImagePath:       imagePath,
+			Answers:         map[int]string{1: "Positive"},
+			GridAnnotations: map[int]string{2: "A1 C2"},
+		})).
+		Once()
+
+	// When
+	rows, err := export.New(currentProject, export.WithCreateFile(func(string) (io.WriteCloser, error) {
+		return writer, nil
+	})).Write(context.Background(), "export.csv")
+
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, 1, rows)
+	actualRows, err := csv.NewReader(bytes.NewReader(writer.Bytes())).ReadAll()
+	require.NoError(t, err)
+	require.Equal(t, [][]string{
+		{"image", "Sentiment?", "Cars?", "Cars? pixels"},
+		{
+			"street.jpg",
+			"Positive",
+			"A1 C2",
+			`[{"cell":"A1","x":0,"y":0,"width":33,"height":33},{"cell":"C2","x":66,"y":33,"width":34,"height":33}]`,
+		},
+	}, actualRows)
+}
+
+func TestCSVWriteIncludesEmptyGridPixelSelection(t *testing.T) {
+	// Given
+	currentProject := mocks.NewExportProject(t)
+	questions := []project.Question{
+		{ID: 2, Kind: project.QuestionKindImageGrid, Text: "Cars?", GridRows: 3, GridColumns: 3},
+	}
+	writer := &bufferWriteCloser{}
+
+	currentProject.EXPECT().Questions(mock.Anything).Return(questions, nil).Once()
+	currentProject.EXPECT().DataColumns().Return([]string{"image"}).Once()
+	currentProject.EXPECT().
+		ClassifiedRecords(mock.Anything, questions).
+		Return(classifiedRecords(project.ClassifiedRecord{
+			Data:            map[string]string{"image": "street.jpg"},
+			GridAnnotations: map[int]string{2: ""},
+		})).
+		Once()
+
+	// When
+	rows, err := export.New(currentProject, export.WithCreateFile(func(string) (io.WriteCloser, error) {
+		return writer, nil
+	})).Write(context.Background(), "export.csv")
+
+	// Then
+	require.NoError(t, err)
+	require.Equal(t, 1, rows)
+	actualRows, err := csv.NewReader(bytes.NewReader(writer.Bytes())).ReadAll()
+	require.NoError(t, err)
+	require.Equal(t, [][]string{
+		{"image", "Cars?", "Cars? pixels"},
+		{"street.jpg", "", "[]"},
+	}, actualRows)
 }
 
 func TestCSVWriteReturnsCreateError(t *testing.T) {
@@ -220,4 +301,23 @@ func (w failingWriter) Write(_ []byte) (int, error) {
 
 func (w failingWriter) Close() error {
 	return nil
+}
+
+func writePNG(t *testing.T, width, height int) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "image.png")
+	file, err := os.Create(path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Close()) }()
+
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: 255, A: 255})
+		}
+	}
+	require.NoError(t, png.Encode(file, img))
+
+	return path
 }

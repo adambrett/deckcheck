@@ -626,6 +626,55 @@ func (_c *AppProject_SaveClassification_Call) RunAndReturn(run func(context.Cont
 	return _c
 }
 
+// SaveGridAnnotation provides a mock function with given fields: ctx, rowID, questionID, value
+func (_m *AppProject) SaveGridAnnotation(ctx context.Context, rowID int, questionID int, value string) error {
+	ret := _m.Called(ctx, rowID, questionID, value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SaveGridAnnotation")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int, int, string) error); ok {
+		r0 = rf(ctx, rowID, questionID, value)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// AppProject_SaveGridAnnotation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SaveGridAnnotation'
+type AppProject_SaveGridAnnotation_Call struct {
+	*mock.Call
+}
+
+// SaveGridAnnotation is a helper method to define mock.On call
+//   - ctx context.Context
+//   - rowID int
+//   - questionID int
+//   - value string
+func (_e *AppProject_Expecter) SaveGridAnnotation(ctx interface{}, rowID interface{}, questionID interface{}, value interface{}) *AppProject_SaveGridAnnotation_Call {
+	return &AppProject_SaveGridAnnotation_Call{Call: _e.mock.On("SaveGridAnnotation", ctx, rowID, questionID, value)}
+}
+
+func (_c *AppProject_SaveGridAnnotation_Call) Run(run func(ctx context.Context, rowID int, questionID int, value string)) *AppProject_SaveGridAnnotation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int), args[2].(int), args[3].(string))
+	})
+	return _c
+}
+
+func (_c *AppProject_SaveGridAnnotation_Call) Return(_a0 error) *AppProject_SaveGridAnnotation_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *AppProject_SaveGridAnnotation_Call) RunAndReturn(run func(context.Context, int, int, string) error) *AppProject_SaveGridAnnotation_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewAppProject creates a new instance of AppProject. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewAppProject(t interface {

@@ -4,9 +4,17 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"image"
+	_ "image/gif"  // register GIF decoder for image.DecodeConfig
+	_ "image/jpeg" // register JPEG decoder for image.DecodeConfig
+	_ "image/png"  // register PNG decoder for image.DecodeConfig
 	"io"
 	"iter"
 	"os"
+	"strings"
+
+	_ "golang.org/x/image/bmp"  // register BMP decoder for image.DecodeConfig
+	_ "golang.org/x/image/webp" // register WebP decoder for image.DecodeConfig
 
 	"github.com/adambrett/deckcheck/internal/project"
 )
@@ -64,8 +72,9 @@ func New(p Project, opts ...Option) *CSV {
 }
 
 // Write serialises every record of the project to path. The first
-// column block is the original data in source order, followed by one
-// column per question. It returns the number of records written.
+// column block is the original data in source order, followed by the
+// classification columns. Image-grid questions also receive an adjacent
+// pixel-bounds column. It returns the number of records written.
 //
 // On failure the partially written file is removed, so an aborted
 // export never leaves a truncated CSV at the user's chosen path.
@@ -98,10 +107,13 @@ func (c *CSV) Write(ctx context.Context, path string) (count int, err error) {
 
 	writer := csv.NewWriter(file)
 
-	headers := make([]string, 0, len(originalHeaders)+len(questions))
+	headers := make([]string, 0, len(originalHeaders)+len(questions)*2)
 	headers = append(headers, originalHeaders...)
 	for _, question := range questions {
 		headers = append(headers, question.Text)
+		if question.Kind == project.QuestionKindImageGrid {
+			headers = append(headers, question.Text+" pixels")
+		}
 	}
 
 	if err := writer.Write(headers); err != nil {
@@ -121,6 +133,16 @@ func (c *CSV) Write(ctx context.Context, path string) (count int, err error) {
 			row = append(row, rec.Data[header])
 		}
 		for _, question := range questions {
+			if question.Kind == project.QuestionKindImageGrid {
+				selection, ok := rec.GridAnnotations[question.ID]
+				row = append(row, selection)
+				if !ok {
+					row = append(row, "")
+					continue
+				}
+				row = append(row, gridSelectionPixels(question, selection, rec.ImagePath))
+				continue
+			}
 			row = append(row, rec.Answers[question.ID])
 		}
 
@@ -140,4 +162,41 @@ func (c *CSV) Write(ctx context.Context, path string) (count int, err error) {
 	closed = true
 
 	return count, nil
+}
+
+func gridSelectionPixels(question project.Question, selection, imagePath string) string {
+	if strings.TrimSpace(selection) == "" {
+		return "[]"
+	}
+
+	width, height, err := imageDimensions(imagePath)
+	if err != nil {
+		return ""
+	}
+
+	value, err := project.FormatGridSelectionBoundsJSON(
+		selection,
+		question.GridRows,
+		question.GridColumns,
+		width,
+		height,
+	)
+	if err != nil {
+		return ""
+	}
+	return value
+}
+
+func imageDimensions(path string) (width, height int, err error) {
+	file, err := os.Open(path) //nolint:gosec // project image paths are selected by the user during import
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = file.Close() }()
+
+	config, _, err := image.DecodeConfig(file)
+	if err != nil {
+		return 0, 0, err
+	}
+	return config.Width, config.Height, nil
 }

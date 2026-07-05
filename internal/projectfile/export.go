@@ -44,7 +44,7 @@ func (p *Project) ClassifiedRecords(ctx context.Context, questions []project.Que
 
 		rows, err := conn.QueryContext(ctx, `
 			SELECT dr.id, dr.original_data::VARCHAR, dr.image_path,
-			       c.question_id, c.answer_id
+			       c.question_id, c.answer_id, c.annotation_value
 			FROM dataset_rows dr
 			LEFT JOIN classifications c ON c.row_id = dr.id
 			WHERE dr.project_id = ?
@@ -64,13 +64,14 @@ func (p *Project) ClassifiedRecords(ctx context.Context, questions []project.Que
 
 		for rows.Next() {
 			var (
-				rowID     int
-				jsonData  string
-				imagePath *string
-				qID       sql.NullInt64
-				aID       sql.NullInt64
+				rowID      int
+				jsonData   string
+				imagePath  *string
+				qID        sql.NullInt64
+				aID        sql.NullInt64
+				annotation sql.NullString
 			)
-			if err := rows.Scan(&rowID, &jsonData, &imagePath, &qID, &aID); err != nil {
+			if err := rows.Scan(&rowID, &jsonData, &imagePath, &qID, &aID, &annotation); err != nil {
 				yield(project.ClassifiedRecord{}, fmt.Errorf("scan record: %w", err))
 				return
 			}
@@ -85,8 +86,9 @@ func (p *Project) ClassifiedRecords(ctx context.Context, questions []project.Que
 					return
 				}
 				current = project.ClassifiedRecord{
-					Data:    data,
-					Answers: make(map[int]string),
+					Data:            data,
+					Answers:         make(map[int]string),
+					GridAnnotations: make(map[int]string),
 				}
 				if imagePath != nil {
 					current.ImagePath = *imagePath
@@ -99,6 +101,8 @@ func (p *Project) ClassifiedRecords(ctx context.Context, questions []project.Que
 				if text, ok := answerText[int(aID.Int64)]; ok {
 					current.Answers[int(qID.Int64)] = text
 				}
+			} else if qID.Valid {
+				current.GridAnnotations[int(qID.Int64)] = annotation.String
 			}
 		}
 		if err := rows.Err(); err != nil {

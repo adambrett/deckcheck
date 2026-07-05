@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/adambrett/deckcheck/internal/project"
 )
 
 // SaveClassification stores the user's answer for a (record, question)
@@ -35,7 +37,9 @@ func (p *Project) SaveClassification(ctx context.Context, rowID, questionID, ans
 	}
 
 	result, err := tx.ExecContext(ctx,
-		"UPDATE classifications SET answer_id = ?, classified_at = CURRENT_TIMESTAMP WHERE row_id = ? AND question_id = ?",
+		`UPDATE classifications
+		 SET answer_id = ?, annotation_value = '', classified_at = CURRENT_TIMESTAMP
+		 WHERE row_id = ? AND question_id = ?`,
 		answerID, rowID, questionID,
 	)
 	if err != nil {
@@ -47,7 +51,8 @@ func (p *Project) SaveClassification(ctx context.Context, rowID, questionID, ans
 	}
 	if affected == 0 {
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO classifications (row_id, question_id, answer_id, classified_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+			`INSERT INTO classifications (row_id, question_id, answer_id, annotation_value, classified_at)
+			 VALUES (?, ?, ?, '', CURRENT_TIMESTAMP)`,
 			rowID, questionID, answerID,
 		); err != nil {
 			return fmt.Errorf("insert classification: %w", err)
@@ -70,12 +75,90 @@ func validClassification(ctx context.Context, tx *sql.Tx, projectID, rowID, ques
 		WHERE dr.project_id = ?
 		  AND dr.id = ?
 		  AND q.id = ?
+		  AND q.question_kind = ?
 		  AND a.id = ?
-	`, projectID, rowID, questionID, answerID).Scan(&count); err != nil {
+	`, projectID, rowID, questionID, string(project.QuestionKindChoice), answerID).Scan(&count); err != nil {
 		return false, fmt.Errorf("validate classification: %w", err)
 	}
 
 	return count == 1, nil
+}
+
+// SaveGridAnnotation stores the user's selected grid cells for a
+// (record, image-grid question) pair. Any existing classification for
+// the same pair is replaced. value is normalised before storage.
+func (p *Project) SaveGridAnnotation(ctx context.Context, rowID, questionID int, value string) error {
+	conn, err := p.conn()
+	if err != nil {
+		return err
+	}
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin save grid annotation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, columns, valid, err := validGridAnnotation(ctx, tx, p.info.ID, rowID, questionID)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return ErrInvalidClassification
+	}
+
+	normalized, err := project.NormalizeGridSelection(value, rows, columns)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidClassification, err)
+	}
+
+	result, err := tx.ExecContext(ctx,
+		`UPDATE classifications
+		 SET answer_id = NULL, annotation_value = ?, classified_at = CURRENT_TIMESTAMP
+		 WHERE row_id = ? AND question_id = ?`,
+		normalized, rowID, questionID,
+	)
+	if err != nil {
+		return fmt.Errorf("update grid annotation: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("count updated grid annotations: %w", err)
+	}
+	if affected == 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO classifications (row_id, question_id, answer_id, annotation_value, classified_at)
+			 VALUES (?, ?, NULL, ?, CURRENT_TIMESTAMP)`,
+			rowID, questionID, normalized,
+		); err != nil {
+			return fmt.Errorf("insert grid annotation: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit grid annotation: %w", err)
+	}
+
+	return nil
+}
+
+func validGridAnnotation(ctx context.Context, tx *sql.Tx, projectID, rowID, questionID int) (rows, columns int, valid bool, err error) {
+	queryErr := tx.QueryRowContext(ctx, `
+		SELECT q.grid_rows, q.grid_columns
+		FROM dataset_rows dr
+		JOIN questions q ON q.project_id = dr.project_id
+		WHERE dr.project_id = ?
+		  AND dr.id = ?
+		  AND q.id = ?
+		  AND q.question_kind = ?
+	`, projectID, rowID, questionID, string(project.QuestionKindImageGrid)).Scan(&rows, &columns)
+	if errors.Is(queryErr, sql.ErrNoRows) {
+		return 0, 0, false, nil
+	}
+	if queryErr != nil {
+		return 0, 0, false, fmt.Errorf("validate grid annotation: %w", queryErr)
+	}
+
+	return rows, columns, true, nil
 }
 
 // DeleteClassification removes the answer recorded for a (record,

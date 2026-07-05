@@ -5,6 +5,8 @@ import (
 
 	"fyne.io/fyne/v2/lang"
 
+	"github.com/adambrett/deckcheck/internal/project"
+	recordpanel "github.com/adambrett/deckcheck/internal/ui/views/classifier/widgets/panels/record"
 	"github.com/adambrett/deckcheck/internal/usererror"
 )
 
@@ -83,6 +85,77 @@ func (v *View) onAnswerSelected(questionID, answerID int, selected bool) {
 	})
 }
 
+// onGridSaved persists an image-grid selection. The panel has already
+// marked the grid question answered optimistically; failed writes
+// restore the panel from the project file, just like answer choices.
+func (v *View) onGridSaved(questionID int, value string) {
+	if v.currentRecord == nil {
+		v.answerPanel.SetRecordState(nil, nil)
+		return
+	}
+
+	v.cancelPendingAdvance()
+	recordID := v.currentRecord.ID
+	recordIndex := v.currentIndex
+
+	v.life.GoSerial(func(ctx context.Context) func() {
+		err := v.project.SaveGridAnnotation(context.WithoutCancel(ctx), recordID, questionID, value)
+
+		return func() {
+			if v.currentRecord == nil || v.currentRecord.ID != recordID {
+				return
+			}
+			if err != nil {
+				v.statusLabel.SetText(lang.L("Failed to save"))
+				v.showError(usererror.Wrap("DC17", usererror.ErrSaveClassification, err))
+				v.restoreSelections(recordID, recordIndex)
+				return
+			}
+
+			if v.currentRecord.GridAnnotations == nil {
+				v.currentRecord.GridAnnotations = make(map[int]string)
+			}
+			v.currentRecord.GridAnnotations[questionID] = value
+
+			if v.answerPanel.AllAnswered() {
+				v.statusLabel.SetText(lang.L("✓ Saved"))
+				v.updateProgress()
+				v.scheduleAdvance()
+				return
+			}
+
+			v.statusLabel.SetText("")
+		}
+	})
+}
+
+func (v *View) onActiveQuestionChanged(question *project.Question) {
+	if question == nil ||
+		question.Kind != project.QuestionKindImageGrid ||
+		v.currentRecord == nil ||
+		!v.currentRecord.HasImage() {
+		v.recordDisplay.ClearGrid()
+		return
+	}
+
+	v.recordDisplay.SetGrid(recordpanel.GridConfig{
+		Rows:      question.GridRows,
+		Columns:   question.GridColumns,
+		Selection: v.answerPanel.GridSelection(question.ID),
+		Changed:   v.onGridSelectionChanged,
+	})
+}
+
+func (v *View) onGridSelectionChanged(value string) {
+	question := v.answerPanel.ActiveQuestion()
+	if question == nil || question.Kind != project.QuestionKindImageGrid {
+		return
+	}
+
+	v.answerPanel.SetGridSelection(question.ID, value)
+	v.statusLabel.SetText("")
+}
+
 // restoreSelections re-reads the record after a failed write and
 // resets the answer panel from it. The database is the single source
 // of truth for selections; the view keeps no separate copy to roll
@@ -106,7 +179,7 @@ func (v *View) restoreSelections(recordID, recordIndex int) {
 			}
 
 			v.currentRecord = record
-			v.answerPanel.SetSelections(record.Answers)
+			v.answerPanel.SetRecordState(record.Answers, record.GridAnnotations)
 		}
 	})
 }

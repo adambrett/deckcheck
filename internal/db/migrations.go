@@ -17,7 +17,7 @@ import (
 // newer DeckCheck and we refuse to open it (rather than risk silent
 // corruption); a database that records a lower version is migrated
 // forward on open.
-const CurrentSchemaVersion = 4
+const CurrentSchemaVersion = 5
 
 //go:embed migrations/*.sql
 var migrationsFS embed.FS

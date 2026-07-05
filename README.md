@@ -22,9 +22,9 @@ Screenshots are software-rendered straight from the real views; regenerate with 
 
 - Create one-file `.deckcheck` projects (DuckDB under the hood) that store the dataset, questions, answers, and classifications.
 - Import plain CSV files, folders of images, or CSV files with an image path column.
-- Define one or more multiple-choice questions per project.
+- Define one or more multiple-choice or image-grid questions per project.
 - Classify quickly with number keys, previous/next navigation, skip, and an unclassified-only mode.
-- Export the original rows plus classification answers as a CSV.
+- Export the original rows plus classification answers, grid cell selections, and selected cell pixel bounds as a CSV.
 
 ## Installation
 
@@ -59,7 +59,7 @@ Create a project:
 1. Choose **New Project**.
 2. Pick a `.deckcheck` file path for the project database.
 3. Select a dataset type: CSV file, image folder, or CSV with image references.
-4. Add one or more questions with comma-separated possible answers.
+4. Add one or more questions with comma-separated possible answers, or choose an image grid question for cell-based annotations.
 5. Classify each record and export the completed dataset with **Export CSV**.
 
 Keyboard shortcuts:

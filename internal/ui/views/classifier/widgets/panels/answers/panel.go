@@ -29,8 +29,10 @@ type Panel struct {
 	questionBox *fyne.Container
 	optionsBox  *fyne.Container
 
-	questions  []project.Question
-	selections map[int]int // questionID -> answerID
+	questions        []project.Question
+	answerSelections map[int]int    // questionID -> answerID
+	gridSelections   map[int]string // questionID -> cell labels
+	gridAnswered     map[int]bool   // questionID -> explicit grid save
 
 	handlers Handlers
 }
@@ -38,15 +40,19 @@ type Panel struct {
 // Handlers bundles the answer panel's outward callbacks. Changed may
 // be nil; the panel guards before invoking.
 type Handlers struct {
-	Changed func(questionID, answerID int, selected bool)
+	Changed               func(questionID, answerID int, selected bool)
+	GridSaved             func(questionID int, value string)
+	ActiveQuestionChanged func(*project.Question)
 }
 
 // New creates a new answer panel.
 func New(questions []project.Question, handlers Handlers) *Panel {
 	p := &Panel{
-		questions:  questions,
-		selections: make(map[int]int),
-		handlers:   handlers,
+		questions:        questions,
+		answerSelections: make(map[int]int),
+		gridSelections:   make(map[int]string),
+		gridAnswered:     make(map[int]bool),
+		handlers:         handlers,
 	}
 
 	p.questionBox = container.NewVBox()
@@ -76,18 +82,58 @@ func (p *Panel) Container() fyne.CanvasObject {
 
 // SetSelections sets the current selections.
 func (p *Panel) SetSelections(selections map[int]int) {
-	p.selections = maps.Clone(selections)
-	if p.selections == nil {
-		p.selections = make(map[int]int)
+	p.SetRecordState(selections, nil)
+}
+
+// SetRecordState sets the current answer and grid selections for the
+// loaded record.
+func (p *Panel) SetRecordState(answerSelections map[int]int, gridSelections map[int]string) {
+	p.answerSelections = maps.Clone(answerSelections)
+	if p.answerSelections == nil {
+		p.answerSelections = make(map[int]int)
+	}
+
+	p.gridSelections = maps.Clone(gridSelections)
+	if p.gridSelections == nil {
+		p.gridSelections = make(map[int]string)
+	}
+	p.gridAnswered = make(map[int]bool, len(p.gridSelections))
+	for questionID := range p.gridSelections {
+		p.gridAnswered[questionID] = true
 	}
 
 	p.refreshActiveQuestion()
 }
 
+// SetGridSelection updates the pending cell selection for a grid
+// question without marking it answered. The owner calls this as the
+// image overlay changes under the pointer.
+func (p *Panel) SetGridSelection(questionID int, value string) {
+	p.gridSelections[questionID] = value
+	if question := p.ActiveQuestion(); question != nil && question.ID == questionID {
+		p.refreshActiveQuestion()
+	}
+}
+
+// GridSelection returns the pending cell selection for questionID.
+func (p *Panel) GridSelection(questionID int) string {
+	return p.gridSelections[questionID]
+}
+
+// ActiveQuestion returns the question currently rendered by the panel.
+func (p *Panel) ActiveQuestion() *project.Question {
+	if len(p.questions) == 0 {
+		return nil
+	}
+
+	question := p.questions[p.activeQuestionIndex()]
+	return &question
+}
+
 // AllAnswered returns true if all questions have been answered.
 func (p *Panel) AllAnswered() bool {
 	for _, q := range p.questions {
-		if _, ok := p.selections[q.ID]; !ok {
+		if !p.questionAnswered(q) {
 			return false
 		}
 	}
@@ -105,6 +151,9 @@ func (p *Panel) SelectAnswerByIndex(index int) {
 	}
 
 	q := p.questions[p.activeQuestionIndex()]
+	if questionKind(q) != project.QuestionKindChoice {
+		return
+	}
 	if index >= 0 && index < len(q.Answers) {
 		p.selectAnswer(q.ID, q.Answers[index].ID)
 	}
@@ -126,7 +175,24 @@ func (p *Panel) refreshActiveQuestion() {
 	p.questionBox.Add(newKicker(fmt.Sprintf(lang.L("Question %d of %d"), index+1, len(p.questions))))
 	p.questionBox.Add(newQuestionText(question.Text))
 
-	selectedAnswerID, hasSelection := p.selections[question.ID]
+	switch questionKind(question) {
+	case project.QuestionKindImageGrid:
+		p.renderGridQuestion(question)
+	default:
+		p.renderChoiceQuestion(question)
+	}
+
+	p.questionBox.Refresh()
+	p.optionsBox.Refresh()
+
+	if p.handlers.ActiveQuestionChanged != nil {
+		active := question
+		p.handlers.ActiveQuestionChanged(&active)
+	}
+}
+
+func (p *Panel) renderChoiceQuestion(question project.Question) {
+	selectedAnswerID, hasSelection := p.answerSelections[question.ID]
 	for i, answer := range question.Answers {
 		// Number-key shortcuts stop at 9; later answers render without
 		// a pill rather than advertising keys that do not exist.
@@ -140,18 +206,26 @@ func (p *Panel) refreshActiveQuestion() {
 		})
 		p.optionsBox.Add(option)
 	}
+}
 
-	p.questionBox.Refresh()
-	p.optionsBox.Refresh()
+func (p *Panel) renderGridQuestion(question project.Question) {
+	save := widget.NewButtonWithIcon(lang.L("Save grid selection"), fyneTheme.DocumentSaveIcon(), func() {
+		p.saveGridSelection(question.ID)
+	})
+	clearButton := widget.NewButtonWithIcon(lang.L("Clear cells"), fyneTheme.ContentClearIcon(), func() {
+		p.clearGridSelection(question.ID)
+	})
+
+	p.optionsBox.Add(container.NewGridWithColumns(2, save, clearButton))
 }
 
 func (p *Panel) selectAnswer(questionID, answerID int) {
 	selected := true
-	if currentAnswerID, ok := p.selections[questionID]; ok && currentAnswerID == answerID {
-		delete(p.selections, questionID)
+	if currentAnswerID, ok := p.answerSelections[questionID]; ok && currentAnswerID == answerID {
+		delete(p.answerSelections, questionID)
 		selected = false
 	} else {
-		p.selections[questionID] = answerID
+		p.answerSelections[questionID] = answerID
 	}
 
 	p.refreshActiveQuestion()
@@ -161,13 +235,45 @@ func (p *Panel) selectAnswer(questionID, answerID int) {
 	}
 }
 
+func (p *Panel) saveGridSelection(questionID int) {
+	value := p.gridSelections[questionID]
+	p.gridAnswered[questionID] = true
+	p.refreshActiveQuestion()
+
+	if p.handlers.GridSaved != nil {
+		p.handlers.GridSaved(questionID, value)
+	}
+}
+
+func (p *Panel) clearGridSelection(questionID int) {
+	p.gridSelections[questionID] = ""
+	p.refreshActiveQuestion()
+}
+
 func (p *Panel) activeQuestionIndex() int {
 	for i, q := range p.questions {
-		if _, answered := p.selections[q.ID]; !answered {
+		if !p.questionAnswered(q) {
 			return i
 		}
 	}
 	return len(p.questions) - 1
+}
+
+func (p *Panel) questionAnswered(q project.Question) bool {
+	switch questionKind(q) {
+	case project.QuestionKindImageGrid:
+		return p.gridAnswered[q.ID]
+	default:
+		_, answered := p.answerSelections[q.ID]
+		return answered
+	}
+}
+
+func questionKind(q project.Question) project.QuestionKind {
+	if q.Kind == "" {
+		return project.QuestionKindChoice
+	}
+	return q.Kind
 }
 
 func newKicker(text string) *canvas.Text {

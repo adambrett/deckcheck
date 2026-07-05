@@ -121,7 +121,7 @@ func (p *Project) Record(ctx context.Context, index int) (*project.Record, error
 
 	rows, err := conn.QueryContext(ctx, `
 		SELECT dr.id, dr.row_index, dr.original_data::VARCHAR, dr.image_path,
-		       c.question_id, c.answer_id
+		       c.question_id, c.answer_id, c.annotation_value
 		FROM dataset_rows dr
 		LEFT JOIN classifications c ON c.row_id = dr.id
 		WHERE dr.project_id = ? AND dr.row_index = ?
@@ -137,19 +137,23 @@ func (p *Project) Record(ctx context.Context, index int) (*project.Record, error
 		jsonData  string
 		imagePath *string
 		answers   = make(map[int]int)
+		grids     = make(map[int]string)
 		found     bool
 	)
 	for rows.Next() {
 		var (
-			qID sql.NullInt64
-			aID sql.NullInt64
+			qID        sql.NullInt64
+			aID        sql.NullInt64
+			annotation sql.NullString
 		)
-		if err := rows.Scan(&rowID, &rowIdx, &jsonData, &imagePath, &qID, &aID); err != nil {
+		if err := rows.Scan(&rowID, &rowIdx, &jsonData, &imagePath, &qID, &aID, &annotation); err != nil {
 			return nil, fmt.Errorf("scan record: %w", err)
 		}
 		found = true
 		if qID.Valid && aID.Valid {
 			answers[int(qID.Int64)] = int(aID.Int64)
+		} else if qID.Valid {
+			grids[int(qID.Int64)] = annotation.String
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -170,10 +174,11 @@ func (p *Project) Record(ctx context.Context, index int) (*project.Record, error
 	}
 
 	return &project.Record{
-		ID:        rowID,
-		Index:     rowIdx,
-		Data:      data,
-		ImagePath: path,
-		Answers:   answers,
+		ID:              rowID,
+		Index:           rowIdx,
+		Data:            data,
+		ImagePath:       path,
+		Answers:         answers,
+		GridAnnotations: grids,
 	}, nil
 }

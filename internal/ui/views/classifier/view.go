@@ -27,6 +27,7 @@ type RecordSource interface {
 // Classifications persists the user's answers and reports progress.
 type Classifications interface {
 	SaveClassification(ctx context.Context, rowID, questionID, answerID int) error
+	SaveGridAnnotation(ctx context.Context, rowID, questionID int, value string) error
 	DeleteClassification(ctx context.Context, rowID, questionID int) error
 	Progress(context.Context) (classified, total int, err error)
 }
@@ -163,7 +164,9 @@ func New(cfg Config, opts ...Option) *View {
 
 	v.recordDisplay = record.New()
 	v.answerPanel = answers.New(v.questions, answers.Handlers{
-		Changed: v.onAnswerSelected,
+		Changed:               v.onAnswerSelected,
+		GridSaved:             v.onGridSaved,
+		ActiveQuestionChanged: v.onActiveQuestionChanged,
 	})
 	v.toolbar = toolbar.New(toolbar.Handlers{
 		Previous:                v.Previous,

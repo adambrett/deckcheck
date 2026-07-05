@@ -24,11 +24,11 @@ func normalizeCreateOptions(opts CreateOptions) (CreateOptions, error) {
 
 	questions := make([]project.QuestionDef, len(opts.Questions))
 	for i, q := range opts.Questions {
-		text, answers, err := normalizeQuestion(q.Text, q.Answers)
+		normalized, err := normalizeQuestion(opts.DatasetType, q)
 		if err != nil {
 			return opts, fmt.Errorf("question %d: %w", i+1, err)
 		}
-		questions[i] = project.QuestionDef{Text: text, Answers: answers}
+		questions[i] = normalized
 	}
 	opts.Questions = questions
 
@@ -54,27 +54,59 @@ func validateDatasetOptions(datasetType dataset.Type, imageColumn string) error 
 	return nil
 }
 
-func normalizeQuestion(text string, answers []string) (string, []string, error) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return "", nil, fmt.Errorf("%w: question text is required", ErrInvalidQuestion)
+func normalizeQuestion(datasetType dataset.Type, q project.QuestionDef) (project.QuestionDef, error) {
+	q = q.Normalized()
+	q.Text = strings.TrimSpace(q.Text)
+	if q.Text == "" {
+		return project.QuestionDef{}, fmt.Errorf("%w: question text is required", ErrInvalidQuestion)
+	}
+	if !q.Kind.Valid() {
+		return project.QuestionDef{}, fmt.Errorf("%w: unsupported question kind %q", ErrInvalidQuestion, q.Kind)
 	}
 
+	switch q.Kind {
+	case project.QuestionKindChoice:
+		answers, err := normalizeChoiceAnswers(q.Answers)
+		if err != nil {
+			return project.QuestionDef{}, err
+		}
+		q.Answers = answers
+		q.GridRows = 0
+		q.GridColumns = 0
+	case project.QuestionKindImageGrid:
+		if datasetType == dataset.TypeCSV {
+			return project.QuestionDef{}, fmt.Errorf("%w: image annotation questions require an image dataset", ErrInvalidQuestion)
+		}
+		if !project.ValidGridSize(q.GridRows, q.GridColumns) {
+			return project.QuestionDef{}, fmt.Errorf(
+				"%w: grid size must be between %d and %d",
+				ErrInvalidQuestion,
+				project.MinGridSize,
+				project.MaxGridSize,
+			)
+		}
+		q.Answers = nil
+	}
+
+	return q, nil
+}
+
+func normalizeChoiceAnswers(answers []string) ([]string, error) {
 	out := make([]string, 0, len(answers))
 	for _, answer := range answers {
 		answer = strings.TrimSpace(answer)
 		if answer == "" {
-			return "", nil, fmt.Errorf("%w: answer text is required", ErrInvalidQuestion)
+			return nil, fmt.Errorf("%w: answer text is required", ErrInvalidQuestion)
 		}
 		out = append(out, answer)
 	}
 
 	if duplicate, found := project.FindDuplicateAnswer(out); found {
-		return "", nil, fmt.Errorf("%w: duplicate answer %q", ErrInvalidQuestion, duplicate)
+		return nil, fmt.Errorf("%w: duplicate answer %q", ErrInvalidQuestion, duplicate)
 	}
 	if len(out) < 2 {
-		return "", nil, fmt.Errorf("%w: at least two answers are required", ErrInvalidQuestion)
+		return nil, fmt.Errorf("%w: at least two answers are required", ErrInvalidQuestion)
 	}
 
-	return text, out, nil
+	return out, nil
 }

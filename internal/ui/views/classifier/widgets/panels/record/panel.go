@@ -22,6 +22,7 @@ type Panel struct {
 	container *fyne.Container
 
 	image      *previewImage
+	grid       *imageGridOverlay
 	imageBox   *fyne.Container
 	dataList   *fyne.Container
 	scrollable *container.Scroll
@@ -44,8 +45,10 @@ func New() *Panel {
 		p.showImagePreview(p.imagePath)
 	})
 	p.image.SetMinSize(fyne.NewSize(220, 220))
+	p.grid = newImageGridOverlay()
+	p.grid.Hide()
 
-	p.imageBox = container.NewStack(p.image)
+	p.imageBox = container.NewStack(p.image, p.grid)
 	p.imageBox.Hide()
 
 	p.dataList = container.NewVBox()
@@ -105,6 +108,7 @@ func (p *Panel) SetRecord(record *project.Record) {
 		p.imageBox.Hide()
 		p.imagePath = ""
 		p.image.SetFile("")
+		p.grid.Hide()
 	}
 
 	p.displayData(record.Data, record.ImagePath)
@@ -119,6 +123,7 @@ func (p *Panel) Clear() {
 	p.scrollable.Hide()
 	p.imagePath = ""
 	p.image.SetFile("")
+	p.grid.Hide()
 }
 
 func (p *Panel) loadImage(path string) bool {
@@ -139,7 +144,35 @@ func (p *Panel) loadImage(path string) bool {
 
 	p.imagePath = path
 	p.image.SetFile(path)
+	width, height := imageDimensions(path)
+	p.grid.SetImageDimensions(width, height)
 	return true
+}
+
+// GridConfig describes the active image-grid overlay.
+type GridConfig struct {
+	Rows      int
+	Columns   int
+	Selection string
+	Changed   func(string)
+}
+
+// SetGrid shows the image-grid overlay for the current record image.
+func (p *Panel) SetGrid(cfg GridConfig) {
+	if p.imagePath == "" {
+		p.ClearGrid()
+		return
+	}
+
+	p.grid.SetConfig(cfg)
+	p.grid.Show()
+	p.imageBox.Refresh()
+}
+
+// ClearGrid hides any active image-grid overlay.
+func (p *Panel) ClearGrid() {
+	p.grid.Hide()
+	p.imageBox.Refresh()
 }
 
 func (p *Panel) displayData(data map[string]string, imagePath string) {
